@@ -1,0 +1,231 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User management with Auth0
+model User {
+  id            String    @id @default(cuid())
+  auth0Id       String    @unique
+  email         String    @unique
+  name          String?
+  role          UserRole  @default(CLIENT)
+  
+  // Multi-tenancy: Users belong to organizations
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  
+  // Clients can have access to multiple websites
+  websiteAccess WebsiteAccess[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  CLIENT
+}
+
+// Organization/Client management for multi-tenancy
+model Organization {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  
+  // Contact details
+  contactEmail String?
+  contactPhone String?
+  
+  // Users in this organization
+  users       User[]
+  
+  // Websites owned by this organization
+  websites    Website[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@map("organizations")
+}
+
+// Website/Domain management
+model Website {
+  id             String    @id @default(cuid())
+  name           String
+  domain         String    @unique
+  
+  // Multi-tenancy: belongs to organization
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Tracking configurations
+  googleAnalyticsId String?
+  googleAdsId       String?
+  facebookPixelId   String?
+  
+  // User access permissions
+  userAccess     WebsiteAccess[]
+  
+  // SEO & PPC Data
+  seoMetrics     SeoMetric[]
+  ppcCampaigns   PpcCampaign[]
+  ppcMetrics     PpcMetric[]
+  
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  
+  @@map("websites")
+}
+
+// Granular access control for users to websites
+model WebsiteAccess {
+  id        String  @id @default(cuid())
+  
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  
+  canView   Boolean @default(true)
+  canEdit   Boolean @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([userId, websiteId])
+  @@map("website_access")
+}
+
+// SEO Metrics tracking
+model SeoMetric {
+  id           String   @id @default(cuid())
+  
+  websiteId    String
+  website      Website  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  
+  // Date for this metric snapshot
+  date         DateTime
+  
+  // Core SEO metrics
+  organicSessions      Int?
+  organicUsers         Int?
+  organicPageviews     Int?
+  avgSessionDuration   Float?
+  bounceRate           Float?
+  
+  // Rankings & Keywords
+  avgPosition          Float?
+  totalClicks          Int?
+  totalImpressions     Int?
+  ctr                  Float?
+  
+  // Page-specific metrics
+  topPages             Json? // Array of {page, sessions, users}
+  topKeywords          Json? // Array of {keyword, position, clicks, impressions}
+  
+  // Conversion tracking
+  goalCompletions      Int?
+  goalConversionRate   Float?
+  ecommerceRevenue     Float?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([websiteId, date])
+  @@map("seo_metrics")
+}
+
+// PPC Campaign management
+model PpcCampaign {
+  id           String    @id @default(cuid())
+  
+  websiteId    String
+  website      Website   @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  
+  // Campaign details
+  platformCampaignId String // ID from Google Ads, Facebook, etc.
+  platform           PpcPlatform
+  name              String
+  type              String? // Search, Display, Shopping, etc.
+  
+  // Campaign settings
+  budget            Float?
+  bidStrategy       String?
+  status            String?
+  
+  // Associated metrics
+  metrics           PpcMetric[]
+  
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@unique([websiteId, platformCampaignId, platform])
+  @@map("ppc_campaigns")
+}
+
+enum PpcPlatform {
+  GOOGLE_ADS
+  FACEBOOK_ADS
+  MICROSOFT_ADS
+  LINKEDIN_ADS
+  TWITTER_ADS
+  OTHER
+}
+
+// PPC Metrics tracking
+model PpcMetric {
+  id           String      @id @default(cuid())
+  
+  websiteId    String
+  website      Website     @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  
+  campaignId   String?
+  campaign     PpcCampaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  // Date for this metric snapshot
+  date         DateTime
+  platform     PpcPlatform
+  
+  // Core PPC metrics
+  impressions       Int?
+  clicks            Int?
+  ctr               Float?
+  cost              Float?
+  cpc               Float?
+  cpm               Float?
+  
+  // Conversion metrics
+  conversions       Int?
+  conversionRate    Float?
+  conversionValue   Float?
+  costPerConversion Float?
+  
+  // Quality & Performance
+  qualityScore      Float?
+  adRank           Float?
+  searchImpressionShare Float?
+  
+  // ROI metrics
+  revenue          Float?
+  roas             Float? // Return on Ad Spend
+  profit           Float?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([websiteId, date, platform, campaignId])
+  @@map("ppc_metrics")
+}
