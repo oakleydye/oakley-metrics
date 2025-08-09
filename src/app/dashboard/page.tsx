@@ -28,6 +28,14 @@ function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-4">
+            {user?.role === 'ADMIN' && (
+              <Button 
+                variant="outline"
+                onClick={() => window.location.href = '/onboarding'}
+              >
+                Client Onboarding
+              </Button>
+            )}
             <span className="text-sm bg-primary/10 text-primary px-2 py-1 rounded">
               {user?.role}
             </span>

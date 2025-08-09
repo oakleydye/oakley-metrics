@@ -1,61 +1,139 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { PrismaClient } from '@prisma/client';
+import { cookies } from 'next/headers';
+
+const prisma = new PrismaClient();
+
+// Verify admin access
+async function verifyAdminAccess() {
+  const cookieStore = await cookies();
+  const userInfoCookie = cookieStore.get('user_info');
+  
+  if (!userInfoCookie) {
+    return { error: 'Not authenticated', status: 401 };
+  }
+  
+  const userInfo = JSON.parse(userInfoCookie.value);
+  if (userInfo.role !== 'ADMIN') {
+    return { error: 'Admin access required', status: 403 };
+  }
+  
+  return { success: true };
+}
 
 export async function GET() {
   try {
-    // For now, return mock data since we don't have a database set up yet
-    const mockWebsites = [
-      {
-        id: '1',
-        name: 'Main Website',
-        domain: 'example.com',
-        organizationId: '1',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    ];
+    const authCheck = await verifyAdminAccess();
+    if (authCheck.error) {
+      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+    }
 
-    return NextResponse.json({ websites: mockWebsites });
+    const websites = await prisma.website.findMany({
+      include: {
+        organization: {
+          select: {
+            name: true
+          }
+        },
+        _count: {
+          select: {
+            userAccess: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    return NextResponse.json({ websites });
   } catch (error) {
     console.error('Error fetching websites:', error);
     return NextResponse.json(
       { error: 'Failed to fetch websites' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { name, domain, organizationId } = body;
+    const authCheck = await verifyAdminAccess();
+    if (authCheck.error) {
+      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+    }
+
+    const { name, url, description, organizationId, industry, country } = await request.json();
 
     // Validate required fields
-    if (!name || !domain || !organizationId) {
+    if (!name || !url || !organizationId) {
       return NextResponse.json(
-        { error: 'Name, domain, and organizationId are required' },
+        { error: 'Name, URL, and organization are required' },
         { status: 400 }
       );
     }
 
-    // For now, return mock data
-    const mockWebsite = {
-      id: Date.now().toString(),
-      name,
-      domain,
-      organizationId,
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    // Validate organization exists
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId }
+    });
 
-    return NextResponse.json(mockWebsite, { status: 201 });
+    if (!organization) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 400 });
+    }
+
+    // Extract domain from URL
+    let domain;
+    try {
+      const urlObj = new URL(url);
+      domain = urlObj.hostname;
+    } catch {
+      return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
+    }
+
+    // Check if website with this domain already exists
+    const existingWebsite = await prisma.website.findFirst({
+      where: { domain }
+    });
+
+    if (existingWebsite) {
+      return NextResponse.json({ error: 'Website with this domain already exists' }, { status: 400 });
+    }
+
+    // Create the website
+    const newWebsite = await prisma.website.create({
+      data: {
+        name,
+        domain,
+        url,
+        description: description || null,
+        organizationId,
+        industry: industry || null,
+        country: country || 'US',
+        isActive: true
+      },
+      include: {
+        organization: {
+          select: {
+            name: true
+          }
+        }
+      }
+    });
+
+    return NextResponse.json({ 
+      website: newWebsite,
+      message: 'Website created successfully'
+    }, { status: 201 });
   } catch (error) {
     console.error('Error creating website:', error);
     return NextResponse.json(
       { error: 'Failed to create website' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

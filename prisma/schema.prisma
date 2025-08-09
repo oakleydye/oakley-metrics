@@ -36,6 +36,7 @@ model User {
 enum UserRole {
   ADMIN
   CLIENT
+  VIEWER
 
   @@schema("app")
 }
@@ -45,6 +46,8 @@ model Organization {
   id          String    @id @default(cuid())
   name        String
   slug        String    @unique
+  description String?
+  domain      String?
   
   // Contact details
   contactEmail String?
@@ -68,6 +71,10 @@ model Website {
   id             String    @id @default(cuid())
   name           String
   domain         String    @unique
+  url            String?
+  description    String?
+  industry       String?
+  country        String?   @default("US")
   
   // Multi-tenancy: belongs to organization
   organizationId String

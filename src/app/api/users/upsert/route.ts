@@ -23,8 +23,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user exists
-    const existingUser = await prisma.user.findUnique({
+    // Check if user exists by Auth0 ID first
+    let existingUser = await prisma.user.findUnique({
       where: { auth0Id },
       include: {
         organization: true,
@@ -36,13 +36,29 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // If not found by Auth0 ID, check by email (for onboarding users with temp Auth0 IDs)
+    if (!existingUser) {
+      existingUser = await prisma.user.findUnique({
+        where: { email },
+        include: {
+          organization: true,
+          websiteAccess: {
+            include: {
+              website: true
+            }
+          }
+        }
+      });
+    }
+
     let user;
 
     if (existingUser) {
-      // Update existing user
+      // Update existing user - make sure to update Auth0 ID if it was a temp one
       user = await prisma.user.update({
-        where: { auth0Id },
+        where: { id: existingUser.id }, // Use ID instead of auth0Id in case we found by email
         data: {
+          auth0Id, // Update to real Auth0 ID
           email,
           name,
           ...(role && { role }),
@@ -56,6 +72,8 @@ export async function POST(request: NextRequest) {
           }
         }
       });
+      
+      console.log(`Updated existing user: ${existingUser.email} with Auth0 ID: ${auth0Id}`);
     } else {
       // Create new user
       user = await prisma.user.create({
@@ -75,8 +93,7 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // If it's a new client user, you might want to assign them to a default organization
-      // or create organization-specific logic here
+      console.log(`Created new user: ${email} with Auth0 ID: ${auth0Id}`);
     }
 
     // Return user data (excluding sensitive information)

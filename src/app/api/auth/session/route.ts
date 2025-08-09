@@ -17,7 +17,8 @@ export async function GET() {
     const auth0UserInfo = JSON.parse(userInfoCookie.value);
     
     // Get complete user data from database
-    const dbUser = await prisma.user.findUnique({
+    // First try by Auth0 ID, then by email (for onboarding users)
+    let dbUser = await prisma.user.findUnique({
       where: { auth0Id: auth0UserInfo.sub },
       include: {
         organization: true,
@@ -28,6 +29,38 @@ export async function GET() {
         }
       }
     });
+
+    // If not found by Auth0 ID, try by email
+    if (!dbUser && auth0UserInfo.email) {
+      dbUser = await prisma.user.findUnique({
+        where: { email: auth0UserInfo.email },
+        include: {
+          organization: true,
+          websiteAccess: {
+            include: {
+              website: true
+            }
+          }
+        }
+      });
+
+      // If found by email, update the Auth0 ID
+      if (dbUser) {
+        dbUser = await prisma.user.update({
+          where: { id: dbUser.id },
+          data: { auth0Id: auth0UserInfo.sub },
+          include: {
+            organization: true,
+            websiteAccess: {
+              include: {
+                website: true
+              }
+            }
+          }
+        });
+        console.log(`Updated user ${dbUser.email} with Auth0 ID: ${auth0UserInfo.sub}`);
+      }
+    }
     
     if (!dbUser) {
       // User not found in database, create them

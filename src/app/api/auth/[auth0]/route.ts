@@ -72,7 +72,8 @@ export async function GET(
         }
         
         const auth0User = await userResponse.json();
-        
+        console.log('Auth0 user info:', auth0User);
+
         // Extract roles from Auth0 user metadata or custom claims
         // Auth0 typically stores roles in app_metadata or custom claims
         const roles = auth0User['https://auth.oakleydye.com/roles'] || 
