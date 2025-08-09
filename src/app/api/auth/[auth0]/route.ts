@@ -59,7 +59,7 @@ export async function GET(
         
         const tokens = await tokenResponse.json();
         
-        // Get user info
+        // Get user info with roles
         const userResponse = await fetch(`${process.env.AUTH0_ISSUER_BASE_URL}/userinfo`, {
           headers: {
             'Authorization': `Bearer ${tokens.access_token}`,
@@ -71,7 +71,39 @@ export async function GET(
           return NextResponse.redirect('/?error=user_info_failed');
         }
         
-        const user = await userResponse.json();
+        const auth0User = await userResponse.json();
+        
+        // Extract roles from Auth0 user metadata or custom claims
+        // Auth0 typically stores roles in app_metadata or custom claims
+        const roles = auth0User['https://auth.oakleydye.com/roles'] || 
+                     auth0User.app_metadata?.roles || 
+                     auth0User['auth.oakleydye.com/roles'] || 
+                     ['CLIENT']; // Default role
+        
+        const userRole = roles.includes('ADMIN') ? 'ADMIN' : 'CLIENT';
+        
+        // Create or update user in database
+        try {
+          const userUpsertResponse = await fetch(`${process.env.AUTH0_BASE_URL}/api/users/upsert`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              auth0Id: auth0User.sub,
+              email: auth0User.email,
+              name: auth0User.name || auth0User.nickname,
+              role: userRole,
+            }),
+          });
+          
+          if (!userUpsertResponse.ok) {
+            console.warn('Failed to upsert user in database');
+          }
+        } catch (dbError) {
+          console.warn('Database upsert failed:', dbError);
+          // Continue with auth flow even if DB fails
+        }
         
         // Create response and set secure cookies
         const response = NextResponse.redirect(`${process.env.AUTH0_BASE_URL}/dashboard`);
@@ -96,7 +128,10 @@ export async function GET(
         }
         
         // Store user info in a cookie (or save to database)
-        response.cookies.set('user_info', JSON.stringify(user), {
+        response.cookies.set('user_info', JSON.stringify({
+          ...auth0User,
+          role: userRole
+        }), {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
