@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 // Simple auth route handler - we'll implement Auth0 login/callback later
 export async function GET(
   request: NextRequest,
-  { params }: { params: { auth0: string } }
+  { params }: { params: Promise<{ auth0: string }> }
 ) {
-  const { auth0 } = params;
+  const { auth0 } = await params;
   
   switch (auth0) {
     case 'login':

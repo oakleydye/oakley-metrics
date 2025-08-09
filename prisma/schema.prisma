@@ -8,6 +8,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["public", "app"]
 }
 
 // User management with Auth0
@@ -29,11 +30,14 @@ model User {
   updatedAt     DateTime  @updatedAt
   
   @@map("users")
+  @@schema("app")
 }
 
 enum UserRole {
   ADMIN
   CLIENT
+
+  @@schema("app")
 }
 
 // Organization/Client management for multi-tenancy
@@ -56,6 +60,7 @@ model Organization {
   updatedAt   DateTime  @updatedAt
   
   @@map("organizations")
+  @@schema("app")
 }
 
 // Website/Domain management
@@ -86,6 +91,7 @@ model Website {
   updatedAt      DateTime  @updatedAt
   
   @@map("websites")
+  @@schema("app")
 }
 
 // Granular access control for users to websites
@@ -106,6 +112,7 @@ model WebsiteAccess {
   
   @@unique([userId, websiteId])
   @@map("website_access")
+  @@schema("app")
 }
 
 // SEO Metrics tracking
@@ -145,6 +152,7 @@ model SeoMetric {
   
   @@unique([websiteId, date])
   @@map("seo_metrics")
+  @@schema("app")
 }
 
 // PPC Campaign management
@@ -174,6 +182,7 @@ model PpcCampaign {
   
   @@unique([websiteId, platformCampaignId, platform])
   @@map("ppc_campaigns")
+  @@schema("app")
 }
 
 enum PpcPlatform {
@@ -183,6 +192,8 @@ enum PpcPlatform {
   LINKEDIN_ADS
   TWITTER_ADS
   OTHER
+
+  @@schema("app")
 }
 
 // PPC Metrics tracking
@@ -228,4 +239,5 @@ model PpcMetric {
   
   @@unique([websiteId, date, platform, campaignId])
   @@map("ppc_metrics")
+  @@schema("app")
 }
